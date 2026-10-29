@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const C=require('../app/src/main/assets/calibration.js');
+const sample=Array.from({length:12},(_,i)=>({hour:15,predicted:5,actual:4,date:'2026-10-'+String(i+1).padStart(2,'0')}));
+let model=C.train(sample);
+assert.equal(model[14].ready,false);
+assert.equal(model[15].ready,true);
+assert.ok(C.adjust(5,15,model)<5);
+assert.equal(C.adjust(5,14,model),5);
+assert.equal(C.adjust(null,15,model),null);
+assert.equal(C.score(sample,model).count,12);
+assert.ok(C.score(sample,model).correctedMAE<C.score(sample,model).baselineMAE);
+assert.equal(C.train([{hour:12,predicted:0,actual:10}])[12].ready,false);
+console.log('Calibration tests passed');
