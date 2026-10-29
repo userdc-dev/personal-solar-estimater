@@ -71,7 +71,7 @@ jobs:
           mv "$RUNNER_TEMP/newpipe-cli-unpack/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses > /dev/null || true
-          "$sdkmanager" --sdk_root="$ANDROID_HOME" --install "platforms;android-37" "build-tools;36.0.0" "platform-tools"
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
           "$sdkmanager" --sdk_root="$ANDROID_HOME" --list_installed
 
       - name: Build signed continuous APK
