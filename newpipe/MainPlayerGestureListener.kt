@@ -67,7 +67,10 @@ class MainPlayerGestureListener(
             }
             if (isFullscreenSwipe) {
                 // Delegates orientation/layout changes to NewPipe itself.
-                playerUi.toggleFullscreen()
+                // Reuse the existing rotation/fullscreen action, just like tapping
+                // NewPipe's fullscreen control. This also handles portrait videos.
+                v.parent?.requestDisallowInterceptTouchEvent(false)
+                binding.screenRotationButton.performClick()
                 return true
             }
         } else if (event.actionMasked == MotionEvent.ACTION_CANCEL) {
@@ -77,7 +80,9 @@ class MainPlayerGestureListener(
 
         return when (event.action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                v.parent?.requestDisallowInterceptTouchEvent(playerUi.isFullscreen)
+                v.parent?.requestDisallowInterceptTouchEvent(
+                    playerUi.isFullscreen || canToggleFullscreenOnSwipe
+                )
                 true
             }
 
