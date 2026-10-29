@@ -1,0 +1,73 @@
+name: Build NewPipe Charcoal APK
+
+on:
+  push:
+    branches:
+      - newpipe-charcoal-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-newpipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout official NewPipe 0.29.1
+        uses: actions/checkout@v4
+        with:
+          repository: TeamNewPipe/NewPipe
+          ref: v0.29.1
+          fetch-depth: 1
+
+      - name: Set local variant branch
+        run: git switch -c charcoal
+
+      - name: Change YouTube header from red to charcoal
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("app/src/main/res/values/colors_services.xml")
+          text = path.read_text()
+          replacements = {
+              '<color name="light_youtube_primary_color">#e53935</color>':
+                  '<color name="light_youtube_primary_color">#252525</color>',
+              '<color name="dark_youtube_primary_color">#992722</color>':
+                  '<color name="dark_youtube_primary_color">#202020</color>',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"Expected colour not found: {old}")
+              text = text.replace(old, new)
+          path.write_text(text)
+          print("Red YouTube header replaced with charcoal in light and dark themes")
+          PY
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 37 platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+
+      - name: Build signed continuous APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleContinuous --no-daemon --stacktrace
+
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NewPipe-0.29.1-Charcoal-APK
+          path: app/build/outputs/apk/continuous/*.apk
+          if-no-files-found: error
+          retention-days: 30
