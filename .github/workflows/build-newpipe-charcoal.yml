@@ -51,9 +51,6 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android 37 platform
         run: |
           yes | sdkmanager --licenses >/dev/null || true
