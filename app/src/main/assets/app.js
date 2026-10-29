@@ -1,13 +1,13 @@
 'use strict';
 const $=id=>document.getElementById(id), E=Solar, storeKey='solarcast-v1';
 const defaults={name:'',lat:null,lon:null,inverter:10,loss:13,arrays:[{count:9,watts:440,tilt:25,azimuth:29,shade:0},{count:15,watts:440,tilt:25,azimuth:27,shade:0},{count:6,watts:440,tilt:25,azimuth:299,shade:0}]};
-let state={settings:structuredClone(defaults),cache:null,history:{},battery:null};
+let state={settings:structuredClone(defaults),cache:null,history:{},battery:null,measurements:[]};
 try{const saved=JSON.parse(localStorage.getItem(storeKey));if(saved&&saved.settings&&saved.history)state={...state,...saved};}catch(e){}
 let current=null,selected='',busy=false;
 function persist(){try{localStorage.setItem(storeKey,JSON.stringify(state));}catch(e){notify('Device storage is full. Export a backup before closing the app.');}}
 function notify(text){$('notice').textContent=text;$('notice').classList.toggle('visible',!!text);}
 function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function show(page){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===page));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));window.scrollTo(0,0);if(page==='history')renderHistory();}
+function show(page){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===page));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));window.scrollTo(0,0);if(page==='history')renderHistory();if(page==='learning')renderCalibration();}
 for(const b of document.querySelectorAll('nav button'))b.onclick=()=>show(b.dataset.page);
 function signature(){return JSON.stringify(state.settings);}
 function field(name){return $('settingsForm').elements.namedItem(name);}
@@ -38,8 +38,37 @@ $('daySelect').onchange=()=>{selected=$('daySelect').value;renderDay();};$('refr
 $('actualForm').onsubmit=e=>{e.preventDefault();const date=$('actualDate').value,actual=Number($('actualValue').value),today=E.dateKey(Date.now()/1000,current?.tz||Intl.DateTimeFormat().resolvedOptions().timeZone);if(date>today)return notify('Actual generation cannot be recorded for a future date.');state.history[date]={...state.history[date],actual};persist();renderHistory();notify('Reading saved.');};
 function renderHistory(){const data=Object.entries(state.history).sort(([a],[b])=>b.localeCompare(a)).slice(0,90);$('historyRows').innerHTML=data.map(([date,h])=>`<tr><td>${date}</td><td>${h.forecast?.kwh?.toFixed(1)??'—'}</td><td>${h.actual?.toFixed(1)??'—'}</td><td>${h.actual!=null&&h.forecast?(h.forecast.kwh-h.actual).toFixed(1):'—'}</td><td>${h.actual!=null?`<button data-delete="${date}" aria-label="Delete reading ${date}">×</button>`:''}</td></tr>`).join('');for(const b of document.querySelectorAll('[data-delete]'))b.onclick=()=>{delete state.history[b.dataset.delete].actual;persist();renderHistory();};const pairs=data.filter(([,h])=>h.actual!=null).slice(0,14).reverse(),max=Math.max(1,...pairs.flatMap(([,h])=>[h.actual,h.forecast?.kwh||0]));$('historyChart').innerHTML=pairs.length?pairs.map(([date,h])=>`<div class="barRow"><span>${shortDate(date)}</span><div class="historyPair"><div class="track"><div class="fill" style="width:${(h.forecast?.kwh||0)/max*100}%"></div></div><div class="track"><div class="fill actual" style="width:${h.actual/max*100}%"></div></div></div><strong>${h.actual.toFixed(1)} kWh</strong></div>`).join(''):'Record a reading to start your comparison.';}
 $('batteryForm').onsubmit=e=>{e.preventDefault();try{if(!current)throw Error('Get a forecast first.');if(Date.now()-current.fetched>3*3600000)throw Error('Refresh your stale forecast before calculating.');const values=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,Number(v)])),today=E.dateKey(Date.now()/1000,current.tz),rows=current.rows.filter(r=>r.date===today);if(!rows.length)throw Error('No forecast for today.');const r=E.battery(rows,values,Date.now()/1000);state.battery=values;persist();$('batteryResult').innerHTML=`<div class="eyebrow">ESTIMATED CHARGE AT MIDNIGHT</div><div class="resultNumber">${r.soc.toFixed(0)}%</div><p>Grid energy needed: <b>${r.grid.toFixed(1)} kWh</b><br>Unstored surplus: <b>${r.exported.toFixed(1)} kWh</b></p><p class="fine">Assumes constant ${values.load} kW household load. Surplus is not guaranteed export. Charging your car or running appliances changes this result.</p>`;notify('');}catch(e){notify(e.message);}};
-$('export').onclick=()=>{$('backup').value=JSON.stringify({version:1,settings:state.settings,history:state.history,battery:state.battery},null,2);};$('copyBackup').onclick=async()=>{if(!$('backup').value)$('export').click();try{await navigator.clipboard.writeText($('backup').value);notify('Backup copied.');}catch(e){$('backup').focus();$('backup').select();notify('Long-press the selected text and choose Copy.');}};
-$('importBackup').onclick=()=>{try{const d=JSON.parse($('backup').value);E.validate(d.settings);if(d.version!==1||!d.history||typeof d.history!=='object'||Array.isArray(d.history))throw Error('Invalid backup.');for(const [date,h] of Object.entries(d.history)){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!h||typeof h!=='object'||(h.actual!=null&&(!Number.isFinite(h.actual)||h.actual<0))||(h.forecast&&(!Number.isFinite(h.forecast.kwh)||h.forecast.kwh<0)))throw Error('Invalid history values.');}if(!confirm('Replace your current settings and history with this backup?'))return;state={settings:d.settings,history:d.history,battery:d.battery||null,cache:null};persist();loadForm();renderHistory();notify('Backup restored.');refresh();}catch(e){notify('Could not restore: '+e.message);}};
+$('export').onclick=()=>{$('backup').value=JSON.stringify({version:1,settings:state.settings,history:state.history,battery:state.battery,measurements:state.measurements||[]},null,2);};$('copyBackup').onclick=async()=>{if(!$('backup').value)$('export').click();try{await navigator.clipboard.writeText($('backup').value);notify('Backup copied.');}catch(e){$('backup').focus();$('backup').select();notify('Long-press the selected text and choose Copy.');}};
+$('importBackup').onclick=()=>{try{const d=JSON.parse($('backup').value);E.validate(d.settings);if(d.version!==1||!d.history||typeof d.history!=='object'||Array.isArray(d.history))throw Error('Invalid backup.');for(const [date,h] of Object.entries(d.history)){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!h||typeof h!=='object'||(h.actual!=null&&(!Number.isFinite(h.actual)||h.actual<0))||(h.forecast&&(!Number.isFinite(h.forecast.kwh)||h.forecast.kwh<0)))throw Error('Invalid history values.');}if(!confirm('Replace your current settings and history with this backup?'))return;state={settings:d.settings,history:d.history,battery:d.battery||null,measurements:Array.isArray(d.measurements)?d.measurements:[],cache:null};persist();loadForm();renderHistory();notify('Backup restored.');refresh();}catch(e){notify('Could not restore: '+e.message);}};
+
+function calibrationModel(){return Calibration.train((state.measurements||[]).filter(x=>x.signature===signature()));}
+function renderCalibration(){
+ const readings=(state.measurements||[]).filter(x=>x.signature===signature());
+ const model=calibrationModel(),ready=model.filter(x=>x.ready).length;
+ $('calibrationStatus').textContent=readings.length+' saved measurements · '+ready+' of 24 hours calibrated. At least 5 readings per hour are required.';
+ $('calibrationRows').innerHTML=readings.slice(-20).reverse().map(x=>'<div class="barRow"><span>'+esc(x.time.replace('T',' '))+'</span><span>Predicted '+x.predicted.toFixed(2)+' kW · Actual '+x.actual.toFixed(2)+' kW</span><strong>'+((x.actual-x.predicted)>=0?'+':'')+(x.actual-x.predicted).toFixed(2)+'</strong></div>').join('');
+}
+$('calibrationForm').onsubmit=e=>{
+ e.preventDefault();
+ try{
+  if(!state.cache||state.cache.signature!==signature())throw Error('Get a solar forecast first.');
+  const value=$('calibrationTime').value, actual=Number($('calibrationActual').value);
+  const timestamp=new Date(value).getTime()/1000;
+  if(!Number.isFinite(timestamp)||!Number.isFinite(actual)||actual<0||actual>100)throw Error('Check measurement values.');
+  if(timestamp>Date.now()/1000+300)throw Error('Future measurements cannot be used.');
+  const row=state.cache.rows.find(r=>timestamp>=r.start&&timestamp<r.end);
+  if(!row||row.kw===null)throw Error('No saved forecast for this time. Forecasts are not backfilled.');
+  const hour=Number(E.hour(timestamp,state.cache.tz).slice(0,2));
+  const m={time:value,at:timestamp,hour,actual,predicted:row.kw,signature:signature()};
+  if(!Array.isArray(state.measurements))state.measurements=[];
+  state.measurements=state.measurements.filter(x=>!(x.signature===m.signature&&Math.abs(x.at-m.at)<60));
+  state.measurements.push(m);
+  if(state.measurements.length>3000)state.measurements=state.measurements.slice(-3000);
+  persist();renderCalibration();notify('Reading saved. Forecast corrections update as measurements accumulate.');
+ }catch(err){notify(err.message);}
+};
+$('clearCalibration').onclick=()=>{if(!confirm('Delete all saved calibration readings?'))return;state.measurements=[];persist();renderCalibration();};
+
 loadForm();if(state.battery)for(const [k,v] of Object.entries(state.battery)){const input=$('batteryForm').elements.namedItem(k);if(input)input.value=v;}
 if(state.cache){render();if(Date.now()-state.cache.fetched>3600000)refresh();}else if(state.settings.lat!==null)refresh();else show('setup');
 $('actualDate').value=E.dateKey(Date.now()/1000,current?.tz||Intl.DateTimeFormat().resolvedOptions().timeZone);
