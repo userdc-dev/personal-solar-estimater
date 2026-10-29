@@ -42,7 +42,12 @@ jobs:
                   raise SystemExit(f"Expected colour not found: {old}")
               text = text.replace(old, new)
           path.write_text(text)
-          print("Red YouTube header replaced with charcoal in light and dark themes")
+          header = Path("app/src/main/res/layout/drawer_header.xml")
+          h = header.read_text()
+          if 'android:src="@drawable/background_header"' not in h:
+              raise SystemExit("Expected header graphic reference not found")
+          header.write_text(h.replace('android:src="@drawable/background_header"', 'android:src="@android:color/transparent"'))
+          print("Red colours and patterned header removed; replaced with charcoal")
           PY
 
       - name: Java 21
@@ -51,10 +56,23 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android 37 platform
+      - name: Install Android SDK tools and Android 37
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+          set -euo pipefail
+          export ANDROID_HOME="$RUNNER_TEMP/newpipe-android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl --fail --location --retry 3 --silent --show-error "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o "$RUNNER_TEMP/commandlinetools.zip"
+          echo "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583  $RUNNER_TEMP/commandlinetools.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/commandlinetools.zip" -d "$RUNNER_TEMP/newpipe-cli-unpack"
+          mv "$RUNNER_TEMP/newpipe-cli-unpack/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses > /dev/null || true
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" --install "platforms;android-37" "build-tools;36.0.0" "platform-tools"
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" --list_installed
 
       - name: Build signed continuous APK
         run: |
