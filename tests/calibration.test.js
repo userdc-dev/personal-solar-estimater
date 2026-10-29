@@ -9,5 +9,16 @@ assert.equal(C.adjust(5,14,model),5);
 assert.equal(C.adjust(null,15,model),null);
 assert.equal(C.score(sample,model).count,12);
 assert.ok(C.score(sample,model).correctedMAE<C.score(sample,model).baselineMAE);
+assert.equal(C.train(Array.from({length:30},(_,i)=>({hour:12,actual:3,predicted:5,date:'2026-10-01'})))[12].ready,false,'5-minute readings from one day must not fake independent evidence');
 assert.equal(C.train([{hour:12,predicted:0,actual:10}])[12].ready,false);
+const sig='my-system',history={};
+for(let i=1;i<=7;i++){const date='2026-10-'+String(i).padStart(2,'0');history[date]={forecast:{kwh:80,signature:sig,complete:true,at:Date.UTC(2026,9,i,0)},actual:88};}
+const d=C.dailyModel(history,sig,'2026-10-10');
+assert.equal(d.count,7);
+assert.ok(d.ready&&d.factor>1&&d.factor<=1.2);
+assert.ok(C.correctedDay(80,d)>80);
+assert.equal(C.dailyModel(history,sig,'2026-10-07').ready,false,'Never train from future or current-day actuals');
+assert.equal(C.dailyModel(history,'different-system','2026-10-10').ready,false);
+history['2026-10-08']={forecast:{kwh:80,signature:sig,complete:false},actual:2};
+assert.equal(C.dailyModel(history,sig,'2026-10-10').count,7,'Incomplete days cannot train calibration');
 console.log('Calibration tests passed');
