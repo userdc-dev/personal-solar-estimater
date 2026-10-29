@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set local variant branch
-        run: git switch -c charcoal-gestures
+        run: git switch -c charcoal-gestures-v2
 
       - name: Change YouTube header from red to charcoal
         shell: bash
