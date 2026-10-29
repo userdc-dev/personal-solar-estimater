@@ -24,7 +24,7 @@ function combine(s,res){
 }
 function days(rows){const m=new Map();for(const r of rows){if(!m.has(r.date))m.set(r.date,{date:r.date,kwh:0,peak:0,missing:0,rows:[]});let d=m.get(r.date);d.rows.push(r);if(r.kw===null)d.missing++;else {d.kwh+=r.kw;d.peak=Math.max(d.peak,r.kw);}}return [...m.values()];}
 function battery(rows,{capacity,soc,reserve,load,charge,efficiency},now){
- if(![capacity,soc,reserve,load,charge,efficiency].every(finite)||capacity<=0||soc<0||soc>100||reserve<0||reserve>soc||load<0||charge<=0||efficiency<=0||efficiency>100)throw Error('Check battery inputs; reserve must not exceed current charge.');
+ if(![capacity,soc,reserve,load,charge,efficiency].every(finite)||capacity<=0||soc<0||soc>100||reserve<0||reserve>100||load<0||charge<=0||efficiency<=0||efficiency>100)throw Error('Check battery inputs; reserve must not exceed current charge.');
  let stored=capacity*soc/100,grid=0,exported=0; const minimum=capacity*reserve/100;
  for(const r of rows){let fraction=Math.max(0,Math.min(1,(r.end-now)/3600));if(!fraction)continue;if(r.kw===null)throw Error('Missing forecast hours prevent a battery estimate.');let net=(r.kw-load)*fraction;
  if(net>=0){let incoming=Math.min(net,charge*fraction,(capacity-stored)/(efficiency/100));stored+=incoming*efficiency/100;exported+=net-incoming;}
